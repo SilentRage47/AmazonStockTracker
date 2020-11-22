@@ -1,0 +1,7 @@
+{
+    "CheckPeriodMs":  10000,
+    "AmazonDomain": "it",
+    "XPath": "(//div[contains(@id,\u0027availability\u0027)]//span)[1]",
+    "TelegramBotToken": "",
+    "TelegramChannelId": ""
+}
