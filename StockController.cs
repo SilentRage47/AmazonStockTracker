@@ -19,18 +19,31 @@ namespace AmazonStockTracker
         public StockConfig Config { get; }
         public List<AmazonProduct> Products { get; }
 
-        private static async Task<string> GetString(Uri url, string xPath)
+        private static async Task<string> ParseStringFromUrl (Uri url, string xPath)
         {
-            HttpClient client = new HttpClient();
-            var response = await client.GetAsync(url);
-            var pageContents = await response.Content.ReadAsStringAsync();
+            var client = new HttpClient();
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36");
 
             HtmlDocument pageDocument = new HtmlDocument();
-            pageDocument.LoadHtml(pageContents);
 
-            var text = pageDocument.DocumentNode.SelectSingleNode(xPath).InnerText;
+            try
+            {
+                var response = await client.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+                var pageContents = await response.Content.ReadAsStringAsync();
+                pageDocument.LoadHtml(pageContents);
+            }
+            catch (Exception)
+            {
+                throw;
+            }
 
-            return text.Trim();
+            var singleNode = pageDocument.DocumentNode.SelectSingleNode(xPath);
+
+            if (singleNode is not null)
+                return singleNode.InnerText.Trim();
+            else
+                return string.Empty;
         }
 
         public void TimerCallback(object state)
@@ -40,7 +53,10 @@ namespace AmazonStockTracker
 
         private static (bool,string) CheckAvailability(string availability)
         {
-            //TODO Check Domain
+
+            if (string.IsNullOrEmpty(availability))
+                return (false, "Error parsing URL");
+
             if (availability.Contains("immediata") || availability.Contains("presso") || availability.Contains("solo"))
                 return (true,availability);
             else
@@ -49,18 +65,28 @@ namespace AmazonStockTracker
 
         private async void CheckProductStockAsync(AmazonProduct product)
         {
-            var availabilityString = await GetString(product.Url, Config.XPath);
 
+            string availabilityString;
+            try
+            {
+                availabilityString = await ParseStringFromUrl(product.Url, Config.XPath);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"{DateTime.Now:T} - [Amazon.{Config.AmazonDomain} {product.Description}] ERROR: {ex.Message}");
+                return;
+            }
+            
             var isAvailable = CheckAvailability(availabilityString);
 
             if (isAvailable.Item1)
             {
-                Console.WriteLine($"{DateTime.Now.TimeOfDay} - [Amazon.{Config.AmazonDomain} {product.Description}] {isAvailable.Item2}");
+                Console.WriteLine($"{DateTime.Now:T} - [Amazon.{Config.AmazonDomain} {product.Description}] {isAvailable.Item2}");
                 SendTelegramMessage($"[Amazon.{Config.AmazonDomain} {product.Description}] {isAvailable.Item2} {Environment.NewLine}{product.Url}");
             }
            else
             {
-                Console.WriteLine($"{DateTime.Now.TimeOfDay} - [Amazon.{Config.AmazonDomain} {product.Description}] {isAvailable.Item2}");
+                Console.WriteLine($"{DateTime.Now:T} - [Amazon.{Config.AmazonDomain} {product.Description}] {isAvailable.Item2}");
             }     
         }
 
